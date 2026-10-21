@@ -31,3 +31,16 @@ class ModelTest {
         assertEquals(listOf("default"), parseSessions("""{"sessions":[{"name":"default","running":true},{"name":"old","running":false}]}"""))
     }
 }
+
+class AnsiTest {
+    @Test
+    fun keepsTextAndStylesDropsOtherEscapes() {
+        val a = dev.herdr.android.ui.ansiToAnnotated("\u001B]0;title\u0007\u001B[2K\u001B[1;31mred\u001B[0m plain \u001B[38;5;196mx\u001B[38;2;1;2;3my\u001B[m")
+        assertEquals("red plain xy", a.text)
+        assertEquals("a\nb", dev.herdr.android.ui.ansiToAnnotated("a\r\nb").text)
+        val red = a.spanStyles.first { a.text.substring(it.start, it.end) == "red" }.item
+        assertEquals(androidx.compose.ui.text.font.FontWeight.SemiBold, red.fontWeight)
+        assertEquals(3, a.spanStyles.size) // red, x, y; " plain " unstyled
+        assertEquals(androidx.compose.ui.graphics.Color(1, 2, 3), a.spanStyles.last().item.color)
+    }
+}

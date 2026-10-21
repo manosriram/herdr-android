@@ -36,6 +36,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -226,21 +227,32 @@ fun PaneScreen(nav: Nav, machineId: String, paneId: String) {
     val m = machines.find { it.id == machineId } ?: return
     val snap = states[m.id]?.snap
     val pane = snap?.panes?.find { it.id == paneId }
-    var output by remember { mutableStateOf("") }
+    var output by remember { mutableStateOf(androidx.compose.ui.text.AnnotatedString("")) }
+    var wrap by remember { mutableStateOf(true) }
+    var fontSize by remember { mutableStateOf(12) }
     var error by remember { mutableStateOf<String?>(null) }
     var prompt by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val scroll = rememberScrollState()
 
-    LaunchedEffect(m, paneId) {
+    LaunchedEffect(m, paneId, wrap) {
+        // Unwrapped lines reflow to the phone's width; wrap off shows the terminal's own rows.
+        val source = if (wrap) "recent-unwrapped" else "recent"
         while (true) {
-            runCatching { Herdr.runAsync(m, "pane", "read", paneId, "--source", "recent", "--lines", "200") }
-                .onSuccess { output = it.trimEnd(); error = null }
+            runCatching { Herdr.runAsync(m, "pane", "read", paneId, "--source", source, "--lines", "200", "--ansi") }
+                .onSuccess {
+                    val stick = scroll.value >= scroll.maxValue - 80
+                    output = ansiToAnnotated(it.trimEnd())
+                    error = null
+                    if (stick) {
+                        withFrameNanos {}
+                        scroll.scrollTo(scroll.maxValue)
+                    }
+                }
                 .onFailure { error = it.message }
             delay(1500)
         }
     }
-    LaunchedEffect(output) { scroll.scrollTo(scroll.maxValue) }
 
     fun act(vararg args: String) = scope.launch {
         runCatching { Herdr.runAsync(m, *args) }.onFailure { error = it.message }
@@ -255,11 +267,18 @@ fun PaneScreen(nav: Nav, machineId: String, paneId: String) {
         ) {
             pane?.agent?.let { Badge(pane.status.uppercase(), statusColor(pane.status, p), if (blocked) p.blockedBg else p.surface) }
         }
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Chip("wrap", wrap) { wrap = !wrap }
+            Chip("A−", false) { fontSize = (fontSize - 1).coerceAtLeast(8) }
+            Chip("A+", false) { fontSize = (fontSize + 1).coerceAtMost(20) }
+        }
+        val hscroll = rememberScrollState()
         Box(Modifier.weight(1f).fillMaxWidth().background(p.term).border(1.dp, p.line)) {
             Text(
                 output,
-                Modifier.verticalScroll(scroll).padding(14.dp),
-                color = p.text, fontFamily = Plex, fontSize = 12.sp,
+                Modifier.verticalScroll(scroll).let { if (wrap) it else it.horizontalScroll(hscroll) }.padding(14.dp),
+                color = p.text, fontFamily = Plex, fontSize = fontSize.sp, lineHeight = (fontSize * 1.35).sp,
+                softWrap = wrap,
             )
         }
         error?.let { T(it, 12, p.blocked, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) }
