@@ -16,9 +16,21 @@ android {
         versionName = "0.1.0"
     }
 
+    val signing = rootProject.file("keystore.properties")
+    if (signing.exists()) {
+        val p = java.util.Properties().apply { signing.inputStream().use { load(it) } }
+        signingConfigs.create("release") {
+            storeFile = file(p.getProperty("storeFile"))
+            storePassword = p.getProperty("storePassword")
+            keyAlias = p.getProperty("keyAlias")
+            keyPassword = p.getProperty("keyPassword")
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release")
         }
     }
     compileOptions {
