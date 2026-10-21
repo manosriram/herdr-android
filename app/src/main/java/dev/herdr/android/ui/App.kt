@@ -56,6 +56,7 @@ sealed interface Screen {
     data object Machines : Screen
     data object Agents : Screen
     data class Workspaces(val machineId: String? = null) : Screen
+    data class Workspace(val machineId: String, val wsId: String) : Screen
     data class PaneView(val machineId: String, val paneId: String) : Screen
     data class EditMachine(val id: String?) : Screen
     data object Settings : Screen
@@ -94,6 +95,7 @@ fun App() {
                 Screen.Machines -> MachinesScreen(nav)
                 Screen.Agents -> AgentsScreen(nav)
                 is Screen.Workspaces -> WorkspacesScreen(nav, s.machineId)
+                is Screen.Workspace -> WorkspaceScreen(nav, s.machineId, s.wsId)
                 is Screen.PaneView -> PaneScreen(nav, s.machineId, s.paneId)
                 is Screen.EditMachine -> EditMachineScreen(nav, s.id)
                 Screen.Settings -> SettingsScreen(nav)

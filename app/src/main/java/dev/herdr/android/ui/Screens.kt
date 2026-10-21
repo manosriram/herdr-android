@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -179,26 +180,46 @@ fun WorkspacesScreen(nav: Nav, machineId: String?) {
             T(if (m == null) "Add a machine first." else states[m.id]?.error ?: "connecting…", 13, p.muted, modifier = Modifier.padding(20.dp))
             return@Column
         }
-        LazyColumn(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(snap.workspaces, key = { it.id }) { ws -> WorkspaceCard(nav, m, snap, ws.id) }
+        Panel(Modifier.padding(12.dp)) {
+            LazyColumn {
+                items(snap.workspaces, key = { it.id }) { ws ->
+                    val panes = snap.panes.filter { it.workspaceId == ws.id }
+                    val blocked = panes.count { it.status == "blocked" }
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                            .clickable { nav.push(Screen.Workspace(m.id, ws.id)) }
+                            .padding(horizontal = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Dot(statusColor(ws.status, p))
+                        T(ws.label, 15, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1)
+                        if (blocked > 0) Badge("$blocked blocked", p.blocked, p.blockedBg)
+                        else T("${panes.size} pane${if (panes.size == 1) "" else "s"}", 12, p.muted)
+                        T("›", 16, p.muted)
+                    }
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(p.line))
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun WorkspaceCard(nav: Nav, m: Machine, snap: Snapshot, wsId: String) {
+fun WorkspaceScreen(nav: Nav, machineId: String, wsId: String) {
     val p = LocalPalette.current
+    val machines by Herdr.machines.collectAsState()
+    val states by Herdr.states.collectAsState()
+    val m = machines.find { it.id == machineId } ?: return
+    val snap = states[m.id]?.snap ?: return
     val ws = snap.workspace(wsId) ?: return
     val panes = snap.panes.filter { it.workspaceId == wsId }
-    val blocked = panes.count { it.status == "blocked" }
-    Panel {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                T(ws.label, 17, weight = FontWeight.SemiBold)
-                T("${panes.firstOrNull()?.cwd?.replace(Regex("^/(Users|home)/[^/]+"), "~") ?: ""} · ${ws.id}", 12, p.muted, maxLines = 1)
-            }
-            if (blocked > 0) Badge("$blocked blocked", p.blocked, p.blockedBg)
-        }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        Header(
+            "${m.name} · ${panes.firstOrNull()?.cwd?.replace(Regex("^/(Users|home)/[^/]+"), "~") ?: ws.id}",
+            ws.label,
+            back = { nav.pop() },
+        )
         snap.tabs.filter { it.workspaceId == wsId }.forEach { tab ->
             T(tab.label, 12, p.muted, modifier = Modifier.padding(start = 14.dp, top = 4.dp, bottom = 4.dp))
             panes.filter { it.tabId == tab.id }.forEach { pane ->
